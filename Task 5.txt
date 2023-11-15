@@ -1,0 +1,92 @@
+import cv2
+import face_recognition
+
+# Load the pre-trained face detection model (HOG-based)
+face_detection_model = cv2.CascadeClassifier(cv2.data.haarcascades + 'haarcascade_frontalface_default.xml')
+
+# Load an image or video
+input_file = 'path/to/your/image_or_video.mp4'
+cap = cv2.VideoCapture(input_file)
+
+while cap.isOpened():
+    ret, frame = cap.read()
+
+    if not ret:
+        break
+
+    # Convert the image to grayscale for face detection
+    gray_frame = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+
+    # Perform face detection using the Haar cascade
+    faces = face_detection_model.detectMultiScale(gray_frame, scaleFactor=1.1, minNeighbors=5, minSize=(30, 30))
+
+    # Draw rectangles around detected faces
+    for (x, y, w, h) in faces:
+        cv2.rectangle(frame, (x, y), (x+w, y+h), (0, 255, 0), 2)
+
+    # Display the result
+    cv2.imshow('Face Detection', frame)
+
+    # Break the loop when 'q' key is pressed
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+# Release the capture
+cap.release()
+cv2.destroyAllWindows()
+
+import face_recognition
+
+# Load images with known faces
+known_face_image_1 = face_recognition.load_image_file("path/to/known_face_1.jpg")
+known_face_image_2 = face_recognition.load_image_file("path/to/known_face_2.jpg")
+
+# Encode the faces
+known_face_encoding_1 = face_recognition.face_encodings(known_face_image_1)[0]
+known_face_encoding_2 = face_recognition.face_encodings(known_face_image_2)[0]
+
+# Create arrays of known face encodings and corresponding names
+known_face_encodings = [known_face_encoding_1, known_face_encoding_2]
+known_face_names = ["Person 1", "Person 2"]
+
+# Load an image or video
+input_file = 'path/to/your/image_or_video.mp4'
+cap = cv2.VideoCapture(input_file)
+
+while cap.isOpened():
+    ret, frame = cap.read()
+
+    if not ret:
+        break
+
+    # Find all face locations and face encodings in the current frame
+    face_locations = face_recognition.face_locations(frame)
+    face_encodings = face_recognition.face_encodings(frame, face_locations)
+
+    # Loop through each face found in the frame
+    for (top, right, bottom, left), face_encoding in zip(face_locations, face_encodings):
+        # Check if the face matches any of the known faces
+        matches = face_recognition.compare_faces(known_face_encodings, face_encoding)
+
+        name = "Unknown"
+
+        # If a match is found, use the name of the known face
+        if True in matches:
+            first_match_index = matches.index(True)
+            name = known_face_names[first_match_index]
+
+        # Draw rectangle and label around the face
+        cv2.rectangle(frame, (left, top), (right, bottom), (0, 255, 0), 2)
+        font = cv2.FONT_HERSHEY_DUPLEX
+        cv2.putText(frame, name, (left + 6, bottom - 6), font, 0.5, (255, 255, 255), 1)
+
+    # Display the result
+    cv2.imshow('Face Recognition', frame)
+
+    # Break the loop when 'q' key is pressed
+    if cv2.waitKey(1) & 0xFF == ord('q'):
+        break
+
+# Release the capture
+cap.release()
+cv2.destroyAllWindows()
