@@ -1,0 +1,89 @@
+import torch
+import torch.nn as nn
+import torchvision.transforms as transforms
+from torch.autograd import Variable
+from PIL import Image
+import nltk
+from nltk.tokenize import word_tokenize
+from torchvision import models
+
+# Download NLTK data
+nltk.download('punkt')
+
+# Define the image preprocessing pipeline
+transform = transforms.Compose([
+    transforms.Resize((224, 224)),
+    transforms.ToTensor(),
+    transforms.Normalize((0.485, 0.456, 0.406), (0.229, 0.224, 0.225)),
+])
+
+# Load a pre-trained ResNet model
+resnet = models.resnet50(pretrained=True)
+resnet = nn.Sequential(*list(resnet.children())[:-1])  # Remove the last fully connected layer
+resnet.eval()
+
+# Load the vocabulary for tokenizing captions
+with open('vocabulary.txt', 'r') as file:
+    vocabulary = file.read().splitlines()
+word_to_index = {word: index for index, word in enumerate(vocabulary)}
+index_to_word = {index: word for index, word in enumerate(vocabulary)}
+vocab_size = len(vocabulary)
+
+# Define the LSTM-based image captioning model
+class CaptioningModel(nn.Module):
+    def __init__(self, embed_size, hidden_size, vocab_size):
+        super(CaptioningModel, self).__init__()
+        self.embedding = nn.Embedding(vocab_size, embed_size)
+        self.lstm = nn.LSTM(embed_size, hidden_size, batch_first=True)
+        self.linear = nn.Linear(hidden_size, vocab_size)
+
+    def forward(self, features, captions):
+        embeddings = self.embedding(captions)
+        embeddings = torch.cat((features.unsqueeze(1), embeddings), 1)
+        lstm_out, _ = self.lstm(embeddings)
+        outputs = self.linear(lstm_out)
+        return outputs
+
+# Initialize the model
+embed_size = 256
+hidden_size = 512
+model = CaptioningModel(embed_size, hidden_size, vocab_size)
+
+# Load the pre-trained model weights
+model.load_state_dict(torch.load('captioning_model_weights.pth'))
+model.eval()
+
+# Image captioning function
+def generate_caption(image_path):
+    image = Image.open(image_path)
+    image = transform(image).unsqueeze(0)
+    
+    # Extract image features using the pre-trained ResNet
+    with torch.no_grad():
+        features = resnet(Variable(image))
+    features = features.view(1, -1)
+    
+    # Generate captions using the LSTM-based model
+    sampled_ids = []
+    inputs = torch.LongTensor([[word_to_index['<start>']]])
+    inputs = inputs.cuda() if torch.cuda.is_available() else inputs
+
+    for _ in range(20):  # Maximum caption length
+        outputs = model(features, inputs)
+        _, predicted = outputs.max(2)
+        sampled_ids.append(predicted.item())
+        inputs = predicted
+
+        if index_to_word[sampled_ids[-1]] == '<end>':
+            break
+
+    # Convert the sampled_ids to words
+    sampled_caption = [index_to_word[i] for i in sampled_ids]
+    generated_caption = ' '.join(sampled_caption[1:-1])  # Exclude <start> and <end>
+    
+    return generated_caption
+
+# Example usage
+image_path = 'path/to/your/image.jpg'
+caption = generate_caption(image_path)
+print(f"Image Caption: {caption}")
